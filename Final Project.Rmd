@@ -1,0 +1,304 @@
+---
+title: "Final Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("~/Desktop/Denison/DA/DA 101/Final Project")
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(Hmisc)
+library(knitr)
+library(ggthemes)
+library(xtable)
+library(pander)
+library(maps)
+library(car)
+library(rms)
+library(leaps)
+library(plotly)
+happy16 <- read.csv("2016.csv")
+```
+
+Here we take a look at our data and see how big our sample will be. This is important to know because we need to know how many rows of our data set we need to select at random. 
+
+```{r}
+glimpse(happy16)
+
+sample16 <- sample_n(happy16, 79)
+
+glimpse(sample16)
+```
+
+The glimpse command lets us view the data with things like variable names, row values, what the variables are, and most importantly for us right now, how many rows are in the data set. The next command, sample_n gives us a random sameple of a given number of rows. We chose to select 79 rows, about half of our full data set. 
+
+```{r}
+happytable <- table(happy16$Happiness.Score)
+summary(happytable)
+```
+
+
+Here we want to create a unique visual that we could only really do with a data set like this. It also is a good visual to tell which continents may be the happiest. 
+
+```{r}
+happy16.1 <- happy16 %>%
+  rename(region = Country) 
+happy16.1$region <- gsub("United States","USA",happy16.1$region)  
+
+world_map <- map_data("world")
+happy.16.map <- left_join(happy16.1, world_map, by = "region")
+
+map <- ggplot(happy.16.map, aes(map_id = region, fill = Happiness.Score))+
+  geom_map(map = happy.16.map,  color = "white")+
+  expand_limits(x = happy.16.map$long, y = happy.16.map$lat)+
+  scale_fill_viridis_c(option = "C")
+
+m <- ggplotly(map)
+m
+```
+
+The first couple commands are allowing us to be able to join our data set with the map data set. This is done using the rename command (renames a variable), gsub (replaces any iteration of a particular string with a different value), and left_join (joins two data sets by a column). After this initial wrangling, we are able to use the geom_map command to create this plot. 
+
+By the looks of it, North America, Austrailia, and Europe seem to be the overall happiest. Although Africa is missing a few countries, we can tell that is looks to be overall the least happy continent in the world. 
+
+It may be difficult from the map to see the exact happiness scores for the region. We can make a boxplot with jittered points to see just how happy certain regions are. 
+
+```{r}
+sample16 %>%
+  ggplot(aes(x = Region, y = Happiness.Score, col = Region)) +
+  geom_boxplot() +
+  geom_jitter()
+```
+
+This command gives us a few boxplots. We have a categrorical variable with many different levels which is a good indication a boxplot would work well for viewing the data. This boxplot has each region colored and points jittered on the boxplots. The jittering is helpful to see where each of the countrys within each region are. It also shows us the frequency of countrys in each region which is also helpful to see. 
+
+As we saw in the map and can see even easier here, the minimum of Western Europe is about the same as the maximum of Sub-Saharan Africa. Although, surprisingly the mean of Sub-Saharan Africa is not the smallest. That would belong to Southern Asia. Though, this could be due to the fact that Southern Asia only has 2 data points. 
+
+It may be helpful before we start to see which variables predict happiness score. This is what we will attempt to do here. 
+
+```{r}
+happy16.2 <- sample16 %>% 
+  select(Happiness.Score, Economy..GDP.per.Capita.:Dystopia.Residual)
+best.subset1 <- regsubsets(Happiness.Score~., happy16.2, nvmax = 7)
+sum1 <- summary(best.subset1)
+sum1$outmat
+```
+
+Here we use the select command to pick out a few variables from our data set. From there we can use the regsubsets command to predict happiness score using 7 variables. This command goes through all combinations of the variables to see which ones are most significant for anywhere from 1-7 variables. We then use the summary command to output this regsubsets command.
+
+This shows us that Economy seems to be the most important variable to predict happiness so we may want to plot this first. One varialbe that we may want to remove is Dystopia Residual. From the World Happiness Report: "Dystopia is an imaginary country that has the world’s least-happy people. The purpose in establishing Dystopia is to have a benchmark against which all countries can be favorably compared (no country performs more poorly than Dystopia) in terms of each of the six key variables, thus allowing each sub-bar to be of positive (or zero, in six instances) width." We may want to remove this to see which variables are significant. A country that is happier will have a higher dystopia residual because it is farther from being as unhappy as possible. 
+
+Here we want to explore the same question we did in the last code chunk, but without the dystopia residual variable.
+
+```{r}
+happy16.3 <- sample16 %>% select(Happiness.Score, Economy..GDP.per.Capita.:Generosity)
+best.subset2 <- regsubsets(Happiness.Score~., happy16.3, nvmax = 6)
+sum2 <- summary(best.subset2)
+sum2$outmat
+```
+
+This is the same code chunk as the last one, except we don't select the dystopia residual and only want to find 6 variables. 
+
+By removing dystopia residul, it increases the significance of freedom and decreases the significance of generosity. The other variables remained pretty similar in signifigance. Economy is still the most significant. 
+
+From the previous couple code chunks it would make sense to first explore Economy as a predictor of happiness score. We also may want to color by a variable to see where is the most happy.
+
+```{r}
+sample16 %>%
+  ggplot(aes(x = Economy..GDP.per.Capita., y = Happiness.Score)) +
+  geom_point(aes(col = Region)) +
+  geom_smooth(method = "lm", color = "black") +
+  theme_tufte() +
+  labs(x = "Economy Score", y = "Happiness Score", title = "Happiness Score and Economy by Region") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+This plot is a pretty normal line graph. We used the geom_jitter command to see the values more clearly (this spaces our dots out so they're not on top of eachother). We also used the geom_smooth command to get a line graph with the error bounds. We also used the method = "lm" to give us a straight line which will show us the trend more easily. 
+
+This plot looks really good. It shows just what we've been predicting, that economy predicts happiness score well and that Western Europe seems the happiest while Sub-Saharan Africa seems the least happy. 
+
+We can run a frequency polygon plot to see which regions have the highest frequency of good and bad economies. 
+
+```{r}
+sample16 %>%
+  ggplot(aes(Economy..GDP.per.Capita., colour = Region)) +
+  geom_freqpoly(binwidth = 0.75) + 
+  facet_wrap(~Region)
+```
+
+This is is pretty simple chunk of commands. We use the ggplot command to set the gray plot and the geom_freqpoly to make the freqency polygon. We can edit this by changing the binwidth to 0.75 which gives us a better look at how many countries within each region have an economy that is good or bad. We also facet_wrap to make it easier to see which regions have the highest frequency of good or bad GDP per Capita. 
+
+As we've predicted earlier, Sub-Saharan Africa seems to have a higher frequency of low GDP per capita countries while Western Europe has the highest frequency of high GDP per capita. 
+
+At this point we could run a regression of this plot to see if it has a good p-value and R squared. 
+
+```{r}
+reg4 <- lm(Happiness.Score ~ Economy..GDP.per.Capita., data = sample16)
+summary(reg4)
+```
+
+This command is allowing us to run a linear regression. We want to run a regression of happiness score against economy. We also use the summary command to view the regression itself. 
+
+The p-value is statistically significant, so the null hypothesis is rejected. The null hypothesis for these values is that the variable Economy has a value of zero and has no bearing on the variable Happiness Score. This p-value indicates that there is a high probability of the two variables being correlated. The R-squared value indicates that approximately 67.1% of the variation of the y variable is predicted by the curve, which is pretty high for a bivariate regression. 
+
+We may want to see now how correlated this model is. We can do this doing the correlation test. 
+
+```{r}
+cor.test(sample16$Happiness.Score, sample16$Economy..GDP.per.Capita.)
+```
+
+This is a simple command where we just need to put in our y variable, Happiness Score, and x variable, Economy. 
+
+In this data set, we have a very low p-value and large t value so we reject the null that the true correlation is equal to 0. The 95% confidence interval shows us that it is likely anywhere from 73.4% to 88.2% correlated. It also estimates correlation at 82.2%.
+
+After running the regression we can test the residuals to see if it's a good model for predicting happiness score. 
+
+```{r}
+sample16.res <- mutate(sample16, res = resid(reg4))
+
+sample16.res %>%
+  ggplot(aes(res)) +
+  geom_histogram(color = "white", fill = "purple")
+sample16.res %>%
+  ggplot(aes(Economy..GDP.per.Capita., res)) +
+  geom_point() + 
+  geom_smooth(method = "lm")
+```
+
+The first row of this chunk is adding a column of residuals to our data set. We use the mutate command to make the res variable which is the residuals of our regression. After this we need to create a basic histogram. In the geom_histogram we change the color of the historgram using color = "". Finally, we plot the residuals with a line using the geom_point and geom_smooth commands. 
+
+The histogram of residuals shows us that the residuals are pretty normally distrubuted, something we need to be true to validate the model. The residual plot looks homoscedastic which is another thing we need to be true to validate the model. The final assumption we need to validate our model is that the data must be independent. We can assume this because we are measuring different countries economies which are independent. 
+
+The plots above could suffice, but for our purposes we should dig deeper. Here we can run a Shapiro-Wilk test and NCV test to test for normality and homoscedasticity.
+
+```{r}
+shapiro.test(resid(reg4))
+ncvTest(reg4)
+```
+
+These are some simple commands. We are just running these tests with the residuals of our previous regression. 
+
+The large w-value in these tests show us that the residuals are consistent with normality. The p-value over 0.05 shows us that we fail to reject the null that the residuals are normally distributed. The ncv test gives us a large p-value meaning we fail to reject the null that the residual plot is homoskedastistic.
+
+At this point we want to explore other variables that may predict Happiness Score. From our regsubsets we may want to look at Freedom which was the next variable added after Economy. 
+
+```{r}
+sample16 %>%
+  ggplot(aes(x = Freedom, y = Happiness.Score)) +
+  geom_jitter(aes(col = Region)) +
+  geom_smooth(method = "lm", color = "black") +
+  theme_tufte() +
+  labs(x = "Freedom Score", y = "Happiness Score", title = "Happiness Score and Freedom by Region") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+This plot is a pretty normal line graph. We used the geom_jitter command to see the values more clearly (this spaces our dots out so they're not on top of eachother). We also used the geom_smooth command to get a line graph with the error bounds. We also used the method = "lm" to give us a straight line which will show us the trend more easily. 
+
+This graph seems to have a little more variation than the happiness score versus economy graph. There is a large group of countries in Western Europe and Austrailia and New Zealand that seem to have really high freedom and happiness scores.
+
+Now we might want to run a regression of this to see if it is a good model as well. If it is, we might want to plot freedom and economy on the same graph.
+
+```{r}
+reg5 <- lm(Happiness.Score ~ Freedom, data = sample16)
+summary(reg5)
+```
+
+This command is allowing us to run a linear regression. We want to run a regression of happiness score against freedom We also use the summary command to view the regression itself. 
+
+The p-value is statistically significant, so the null hypothesis is rejected. The null hypothesis for these values is that the variable Freedom has a value of zero and has no bearing on the variable Happiness Score. This p-value indicates that there is a good probability of the two variables being correlated. The R-squared value indicates that approximately 40.7% of the variation of the y variable is predicted by the curve, which is pretty good for a bivariate regression. This seems to be an alright measurement of Happiness Score so we might want to run a regression with Economy and Freedom. 
+
+We may want to see now how correlated this model is. We can do this doing the correlation test. 
+
+```{r}
+cor.test(sample16$Happiness.Score, sample16$Freedom)
+```
+
+This is a simple command where we just need to put in our y variable, Happiness Score, and x variable, Freedom. 
+
+In this data set, we have a very low p-value and pretty large t value so we reject the null that the true correlation is equal to 0. The 95% confidence interval shows us that it is likely anywhere from 49.3% to 75.7% correlated. It also estimates correlation at 64.4%. This is not bad, but worse correlation than when we used economy to predict happiness score.
+
+We can now test the residuals of this regression to validate our model. 
+
+```{r}
+sample16.res1 <- mutate(sample16, res = resid(reg5))
+
+sample16.res1 %>%
+  ggplot(aes(res)) +
+  geom_histogram(color = "white", fill = "purple")
+sample16.res1 %>%
+  ggplot(aes(Freedom, res)) +
+  geom_point() + 
+  geom_smooth(method = "lm")
+```
+
+The first row of this chunk is adding a column of residuals to our data set. We use the mutate command to make the res variable which is the residuals of our regression. After this we need to create a basic histogram. In the geom_histogram we change the color of the historgram using color = "". Finally, we plot the residuals with a line using the geom_point and geom_smooth commands. 
+
+The histogram of residuals shows us that the residuals are pretty normally distrubuted, something we need to be true to validate the model. The residual plot looks homoscedastic which is another thing we need to be true to validate the model. The final assumption we need to validate our model is that the data must be independent. We can assume this because we are measuring different countries freedom which are independent. 
+
+The plots above could suffice, but for our purposes we should dig deeper. Here we can run a Shapiro-Wilk test and NCV test to test for normality and homoscedasticity.
+
+```{r}
+shapiro.test(resid(reg5))
+ncvTest(reg5)
+```
+
+These are some simple commands. We are just running these tests with the residuals of our previous regression. 
+
+The large w-value in these tests show us that the residuals are consistent with normality. The p-value over 0.05 shows us that we fail to reject the null that the residuals are normally distributed. The ncv test gives us a large p-value meaning we fail to reject the null that the residual plot is homoskedastistic.
+
+Now that we've tested the residuals we want to move on to a multivariate regression. From the bestsubset command at the beginning, we should try to predict happiness score using economy and freedom. 
+
+```{r}
+reg6 <- lm(Happiness.Score ~ Economy..GDP.per.Capita. + Freedom, data = sample16)
+summary(reg6)
+```
+
+This command is allowing us to run a linear regression. We want to run a regression of happiness score against freedom We also use the summary command to view the regression itself. 
+
+The p-value is statistically significant, so the null hypothesis is rejected. The null hypothesis for these values is that the variables Economy and Freedom has a value of zero and has no bearing on the variable Happiness Score. This p-value indicates that there is a good probability of the two variables being correlated. The R-squared value indicates that approximately 76.3% of the variation of the y variable is predicted by the curve, which is pretty good for a multivariate regression.
+
+We may want to see now how correlated this model is. We can do this doing the correlation test. 
+
+```{r}
+cor.test(sample16$Happiness.Score, sample16$Economy..GDP.per.Capita. + sample16$Freedom)
+```
+
+This is a simple command where we just need to put in our y variable, Happiness Score, and x variables, freedom and economy. 
+
+In this data set, we have a very low p-value and large t value so we reject the null that the true correlation is equal to 0. The 95% confidence interval shows us that it is likely anywhere from 80.9% to 91.8% correlated. It also estimates correlation at 87.4%. This is the best correlation that we've had so far. 
+
+We may want to do a confidence interval to see how much a change in either of these variables will change happiness score. 
+
+```{r}
+confint(reg6, level=0.95)
+```
+
+This just uses the confint command. The command takes the regression we want to use and given a confidence level, gives us a confidence interval at that level for the coefficients of the regression. 
+
+Here we can see that for every one point increase in the Economy/GDP per Capita score we would expect to see anywhere from a 1.6-2.4 point increase in happiness level. We can also see that for every one point increase in the Freedom score we would expect to see anywhere from a 1.8-3.8 point increase in happiness level. 
+
+
+```{r}
+sample16.1 <- sample16 %>%
+  group_by(Region) %>%
+  mutate(meanEcon = mean(Economy..GDP.per.Capita.), meanFam = mean(Family), meanHealth = mean(Health..Life.Expectancy.), meanFree = mean(Freedom), meanTrust = mean(Trust..Government.Corruption.), meanGen = mean(Generosity), meanDystopia = mean(Dystopia.Residual))
+```
+
+```{r}
+sample16.1 %>%
+  ggplot(aes(x = Region, y = Happiness.Score, fill = Region)) +
+  stat_summary(fun.y = "mean", geom = "bar") +
+  stat_summary(fun.data = "mean_cl_normal", geom = "errorbar", fun.args = list(conf.int = .95), width = 0.35) +
+  theme(legend.position = "none") +
+  labs(x = "Region", y = "Happiness Score", title = "Happiness Score by Region broken up by other Scores")
+```
+
+This is a simple bar graph with confidence bars. We use the stat_summary command to create the bars and error bars. The theme(legend.position = "none") makes it so that the legend on the side doesn't show. This allows us to see the bar graph more. 
+
+The bar graph shows us by region which region is the happiest. It looks like Austrailia and New Zealand are the happiest and also have the least amount of error of any region. Southern Asia has the lowest happiness but the cofidence bar is massive so we would need more countries in that region to really see how happy they are. Eastern Asia also has a large error bar so we could benefit from more data from that region. 
+
